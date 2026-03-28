@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.reviews-container {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    font-family: Arial, sans-serif;
+}
+
+.header {
+    margin-bottom: 30px;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 20px;
+}
+
+h1 {
+    margin: 0 0 20px 0;
+    color: #333;
+    font-size: 28px;
+}
+
+.rating-summary {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.rating-number {
+    font-size: 48px;
+    font-weight: bold;
+    color: #333;
+}
+
+.rating-details {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.summary-stars {
+    color: #ffa500;
+    font-size: 24px;
+    letter-spacing: 2px;
+}
+
+.review-count {
+    color: #666;
+    font-size: 14px;
+}
+
+.review {
+    background: #fafafa;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+}
+
+.stars {
+    color: #ffa500;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.review-name {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.review-date {
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.review-text {
+    color: #555;
+    line-height: 1.6;
+}
+
+.verified {
+    display: inline-block;
+    background: #28a745;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+    .rating-number { font-size: 36px; }
+    .summary-stars { font-size: 20px; }
+    h1 { font-size: 24px; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="reviews-container">
+    <div class="header">
+        <h1>Customer Reviews</h1>
+
+        <div class="rating-summary">
+            <div class="rating-number">0</div>
+            <div class="rating-details">
+                <div class="summary-stars">☆☆☆☆☆</div>
+                <div class="review-count">No reviews yet</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reviews">
+        <div class="empty-state">
+            <div class="empty-icon">💬</div>
+            <p>No reviews yet. Be the first to share your experience!</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    const headers = lines.shift();
+
+    return lines.map(line => {
+        const values = [];
+        let current = '';
+        let insideQuotes = false;
+
+        for (let char of line) {
+            if (char === '"' ) insideQuotes = !insideQuotes;
+            else if (char === ',' && !insideQuotes) {
+                values.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        values.push(current);
+        return values.map(v => v.replace(/^"|"$/g, '').trim());
+    });
+}
+
+async function loadReviews() {
+    try {
+        const sheetURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRZz-PnComQGdPzaIKgECUUEq9aw2-xDBe-OguwpA4MWn0SF9v_oVoECR0yj_dZJ4VZdyFoPv4YVfKB/pub?output=csv';
+
+        const response = await fetch(sheetURL);
+        const text = await response.text();
+
+        const rows = parseCSV(text);
+        const reviewsDiv = document.getElementById('reviews');
+        reviewsDiv.innerHTML = '';
+
+        let totalRating = 0;
+        let reviewCount = 0;
+
+        rows.forEach(cols => {
+
+            const approved = cols[10] && cols[10].toLowerCase() === 'true';
+
+            if (approved) {
+                const rating = parseInt(cols[3]) || 5;
+
+                totalRating += rating;
+                reviewCount++;
+
+                const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+                const verified = cols[9] && cols[9].toLowerCase() === 'true';
+
+                const reviewHTML = `
+                    <div class="review">
+                        <div class="stars">${stars}</div>
+                        <div class="review-name">${cols[6] || 'Anonymous'}</div>
+                        <div class="review-date">${cols[2] ? new Date(cols[2]).toLocaleDateString() : ''}</div>
+                        <div class="review-text">${cols[4] || ''}</div>
+                        ${verified ? '<span class="verified">✓ Verified Purchase</span>' : ''}
+                    </div>
+                `;
+
+                reviewsDiv.innerHTML += reviewHTML;
+            }
+        });
+
+        if (reviewCount > 0) {
+            const avgRating = (totalRating / reviewCount).toFixed(1);
+            const avgStars = Math.round(avgRating);
+
+            document.querySelector('.rating-number').textContent = avgRating;
+            document.querySelector('.summary-stars').textContent =
+                '★'.repeat(avgStars) + '☆'.repeat(5 - avgStars);
+
+            document.querySelector('.review-count').textContent =
+                `Based on ${reviewCount} review${reviewCount !== 1 ? 's' : ''}`;
+        }
+
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+loadReviews();
+</script>
+
+</body>
+</html>
